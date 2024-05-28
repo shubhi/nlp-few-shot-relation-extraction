@@ -113,3 +113,22 @@ def get_loader(name, encoder, N, K, Q, batch_size,
             collate_fn=collate_fn)
     return iter(data_loader)
 
+def test_data_loader(data_loader, num_batches=2):
+    for i in range(num_batches):
+        try:
+            support_set, query_set, query_label = next(data_loader)
+            print(f"Batch {i+1}:")
+            print("Support set word shape:", support_set['word'].shape)
+            print("Support set pos1 shape:", support_set['pos1'].shape)
+            print("Support set pos2 shape:", support_set['pos2'].shape)
+            print("Support set mask shape:", support_set['mask'].shape)
+            print("Query set word shape:", query_set['word'].shape)
+            print("Query set pos1 shape:", query_set['pos1'].shape)
+            print("Query set pos2 shape:", query_set['pos2'].shape)
+            print("Query set mask shape:", query_set['mask'].shape)
+            print("Query label shape:", query_label.shape)
+            print("Query labels:", query_label)
+            print("-" * 50)
+        except StopIteration:
+            print("No more data available from the data loader.")
+            break
