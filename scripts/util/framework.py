@@ -130,8 +130,6 @@ class FewShotREFramework:
             start_iter = 0
 
         model.train()
-        if self.adv:
-            self.d.train()
 
         # Training
         best_acc = 0
@@ -176,7 +174,7 @@ class FewShotREFramework:
 
             if (it + 1) % val_step == 0:
                 acc = self.eval(model, B, N_for_eval, K, Q, val_iter, 
-                        na_rate=na_rate, pair=pair)
+                        na_rate=na_rate)
                 model.train()
                 if acc > best_acc:
                     print('Best checkpoint')

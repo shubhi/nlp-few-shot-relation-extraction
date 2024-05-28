@@ -6,9 +6,6 @@ import random
 import json
 
 class FewRelDataset(data.Dataset):
-    """
-    FewRel Dataset
-    """
     def __init__(self, name, encoder, N, K, Q, na_rate, root):
         self.root = root
         path = os.path.join(root, name + ".json")
@@ -27,6 +24,10 @@ class FewRelDataset(data.Dataset):
         word, pos1, pos2, mask = self.encoder.tokenize(item['tokens'],
             item['h'][2][0],
             item['t'][2][0])
+        # Clip indices to max allowed values
+        word = np.clip(word, 0, 400000)
+        pos1 = np.clip(pos1, 0, 255)
+        pos2 = np.clip(pos2, 0, 255)
         return word, pos1, pos2, mask 
 
     def __additem__(self, d, word, pos1, pos2, mask):
@@ -41,8 +42,7 @@ class FewRelDataset(data.Dataset):
         query_set = {'word': [], 'pos1': [], 'pos2': [], 'mask': [] }
         query_label = []
         Q_na = int(self.na_rate * self.Q)
-        na_classes = list(filter(lambda x: x not in target_classes,  
-            self.classes))
+        na_classes = list(filter(lambda x: x not in target_classes, self.classes))
 
         for i, class_name in enumerate(target_classes):
             indices = np.random.choice(
@@ -50,8 +50,7 @@ class FewRelDataset(data.Dataset):
                     self.K + self.Q, False)
             count = 0
             for j in indices:
-                word, pos1, pos2, mask = self.__getraw__(
-                        self.json_data[class_name][j])
+                word, pos1, pos2, mask = self.__getraw__(self.json_data[class_name][j])
                 word = torch.tensor(word).long()
                 pos1 = torch.tensor(pos1).long()
                 pos2 = torch.tensor(pos2).long()
@@ -64,14 +63,12 @@ class FewRelDataset(data.Dataset):
 
             query_label += [i] * self.Q
 
-        # NA
         for j in range(Q_na):
             cur_class = np.random.choice(na_classes, 1, False)[0]
             index = np.random.choice(
                     list(range(len(self.json_data[cur_class]))),
                     1, False)[0]
-            word, pos1, pos2, mask = self.__getraw__(
-                    self.json_data[cur_class][index])
+            word, pos1, pos2, mask = self.__getraw__(self.json_data[cur_class][index])
             word = torch.tensor(word).long()
             pos1 = torch.tensor(pos1).long()
             pos2 = torch.tensor(pos2).long()
