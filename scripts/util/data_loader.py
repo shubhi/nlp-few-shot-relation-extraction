@@ -113,7 +113,7 @@ def get_loader(name, encoder, N, K, Q, batch_size,
             collate_fn=collate_fn)
     return iter(data_loader)
 
-def test_data_loader(data_loader, num_batches=2):
+def data_loader_verify(data_loader, num_batches=2):
     for i in range(num_batches):
         try:
             support_set, query_set, query_label = next(data_loader)

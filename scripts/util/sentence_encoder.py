@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from network.embedding import Embedding
-from network.encoder import Encoder
+from util.embedding import Embedding
+from util.encoder import Encoder
 
 class CNNSentenceEncoder(nn.Module):
 
@@ -53,7 +53,7 @@ class CNNSentenceEncoder(nn.Module):
         return indexed_tokens, pos1, pos2, mask
 
 
-def test_sentence_encoder(sentence_encoder):
+def sentence_encoder_verify(sentence_encoder):
     # Create dummy data
     raw_tokens = ["This", "is", "a", "test", "sentence", "."]
     pos_head = [1, 1]
