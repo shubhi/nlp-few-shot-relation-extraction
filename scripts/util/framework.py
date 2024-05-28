@@ -130,8 +130,6 @@ class FewShotREFramework:
             start_iter = 0
 
         model.train()
-        if self.adv:
-            self.d.train()
 
         # Training
         best_acc = 0
@@ -164,19 +162,12 @@ class FewShotREFramework:
             iter_loss += self.item(loss.data)
             iter_right += self.item(right.data)
             iter_sample += 1
-            if self.adv:
-                sys.stdout.write('step: {0:4} | loss: {1:2.6f}, accuracy: {2:3.2f}%, dis_loss: {3:2.6f}, dis_acc: {4:2.6f}'
-                    .format(it + 1, iter_loss / iter_sample, 
-                        100 * iter_right / iter_sample,
-                        iter_loss_dis / iter_sample,
-                        100 * iter_right_dis / iter_sample) + '\r')
-            else:
-                sys.stdout.write('step: {0:4} | loss: {1:2.6f}, accuracy: {2:3.2f}%'.format(it + 1, iter_loss / iter_sample, 100 * iter_right / iter_sample) + '\r')
+            sys.stdout.write('step: {0:4} | loss: {1:2.6f}, accuracy: {2:3.2f}%'.format(it + 1, iter_loss / iter_sample, 100 * iter_right / iter_sample) + '\r')
             sys.stdout.flush()
 
             if (it + 1) % val_step == 0:
                 acc = self.eval(model, B, N_for_eval, K, Q, val_iter, 
-                        na_rate=na_rate, pair=pair)
+                        na_rate=na_rate)
                 model.train()
                 if acc > best_acc:
                     print('Best checkpoint')

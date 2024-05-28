@@ -34,8 +34,24 @@ def main():
         glove_mat = np.load('./pretrain/glove_mat.npy')
         glove_word2id = json.load(open('./pretrain/glove_word2id.json'))
         print("GloVe embeddings loaded successfully.")
-        print("GloVe matrix shape:", glove_mat.shape)
-        print("Number of words in GloVe dictionary:", len(glove_word2id))
+
+        # Add entries for [UNK] and [PAD] tokens in the GloVe matrix
+        unk_embedding = np.random.randn(1, glove_mat.shape[1])  # Random initialization for [UNK]
+        pad_embedding = np.zeros((1, glove_mat.shape[1]))       # Zero initialization for [PAD]
+
+        # Extend the GloVe matrix
+        glove_mat = np.vstack([glove_mat, unk_embedding, pad_embedding])
+
+        # Update glove_word2id dictionary to include [UNK] and [PAD]
+        glove_word2id['[UNK]'] = glove_mat.shape[0] - 2
+        glove_word2id['[PAD]'] = glove_mat.shape[0] - 1
+
+        # Convert GloVe matrix to NumPy array if it's a tensor
+        if isinstance(glove_mat, torch.Tensor):
+            glove_mat = glove_mat.numpy()
+
+        print(f"Extended GloVe matrix shape: {glove_mat.shape}")
+        print(f"Number of words in GloVe dictionary: {len(glove_word2id)}")
     except:
         raise Exception("Cannot find glove files. Run glove/download_glove.sh to download glove files.")
     
@@ -99,8 +115,12 @@ def main():
     else:
         raise NotImplementedError
 
-        
-    framework = FewShotREFramework(train_data_loader, val_data_loader)
+    try:  
+        framework = FewShotREFramework(train_data_loader, val_data_loader)
+        print("FewShortREFFramework setup successfully.")
+    except:
+        raise Exception("FewShortREFFramework setup failed.")
+
     
     train_iter = train_iter * grad_iter
     framework.train(model, prefix, batch_size, trainN, N, K, Q,
