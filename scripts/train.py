@@ -38,6 +38,8 @@ def main():
     sentence_encoder = CNNSentenceEncoder(glove_mat, glove_word2id, max_length)
     # test_sentence_encoder(sentence_encoder)
     print("CNNSentenceEncoder instantiated successfully.")
+
+    
     
 
 
