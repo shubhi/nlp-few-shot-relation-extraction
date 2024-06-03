@@ -61,179 +61,48 @@ class FewShotREFramework:
         '''
         self.train_data_loader = train_data_loader
         self.val_data_loader = val_data_loader
-        # self.test_data_loader = test_data_loader
-    
-    def __load_model__(self, ckpt):
-        '''
-        ckpt: Path of the checkpoint
-        return: Checkpoint dict
-        '''
-        if os.path.isfile(ckpt):
-            checkpoint = torch.load(ckpt)
-            print("Successfully loaded checkpoint '%s'" % ckpt)
-            return checkpoint
-        else:
-            raise Exception("No checkpoint found at '%s'" % ckpt)
-    
-    def item(self, x):
-        '''
-        PyTorch before and after 0.4
-        '''
-        torch_version = torch.__version__.split('.')
-        if int(torch_version[0]) == 0 and int(torch_version[1]) < 4:
-            return x[0]
-        else:
-            return x.item()
+    def train_maml(self, model, maml, prefix, batch_size, trainN, N, K, Q,
+                   pytorch_optim=optim.SGD, load_ckpt=None, save_ckpt=None,
+                   na_rate=0, val_step=2000,
+                   train_iter=30000, val_iter=1000,
+                   learning_rate=1e-1, grad_iter=1):
+        if torch.cuda.is_available():
+            model.cuda()
 
-    def train(self,
-              model, model_name,
-              B, N_for_train, N_for_eval, K, Q, na_rate=0,
-              learning_rate=1e-1, lr_step_size=20000, weight_decay=1e-5,
-              train_iter=30000, val_iter=1000, val_step=2000, test_iter=3000,
-              load_ckpt=None, save_ckpt=None,
-              pytorch_optim=optim.SGD,
-              grad_iter=1):
-        '''
-        model: a FewShotREModel instance
-        model_name: Name of the model
-        B: Batch size
-        N: Num of classes for each batch
-        K: Num of instances for each class in the support set
-        Q: Num of instances for each class in the query set
-        ckpt_dir: Directory of checkpoints
-        learning_rate: Initial learning rate
-        lr_step_size: Decay learning rate every lr_step_size steps
-        weight_decay: Rate of decaying weight
-        train_iter: Num of iterations of training
-        val_iter: Num of iterations of validating
-        val_step: Validate every val_step steps
-        test_iter: Num of iterations of testing
-        '''
-        print("Start training...")
-    
-        # Init
-        
-        optimizer = pytorch_optim(model.parameters(), learning_rate, weight_decay=weight_decay)
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=lr_step_size)
+        optimizer = pytorch_optim(maml.parameters(), lr=learning_rate)
 
         if load_ckpt:
-            state_dict = self.__load_model__(load_ckpt)['state_dict']
-            own_state = model.state_dict()
-            for name, param in state_dict.items():
-                if name not in own_state:
-                    print('ignore {}'.format(name))
-                    continue
-                print('load {} from {}'.format(name, load_ckpt))
-                own_state[name].copy_(param)
-            start_iter = 0
-        else:
-            start_iter = 0
+            state_dict = torch.load(load_ckpt)['state_dict']
+            model.load_state_dict(state_dict)
 
-        model.train()
+        for iteration in range(train_iter):
+            support_set, support_labels, query_set, query_labels = next(iter(self.train_data_loader))
 
-        # Training
-        best_acc = 0
-        iter_loss = 0.0
-        iter_loss_dis = 0.0
-        iter_right = 0.0
-        iter_right_dis = 0.0
-        iter_sample = 0.0
-        for it in range(start_iter, start_iter + train_iter):
-            support, query, label = next(self.train_data_loader)
             if torch.cuda.is_available():
-                for k in support:
-                    support[k] = support[k].cuda()
-                for k in query:
-                    query[k] = query[k].cuda()
-                label = label.cuda()
+                support_set, support_labels = support_set.cuda(), support_labels.cuda()
+                query_set, query_labels = query_set.cuda(), query_labels.cuda()
 
-            logits, pred = model(support, query, 
-                    N_for_train, K, Q * N_for_train + na_rate * Q)
-            loss = model.loss(logits, label) / float(grad_iter)
-            right = model.accuracy(pred, label)
+            maml.train()
+            optimizer.zero_grad()
+            loss, _ = maml(support_set, support_labels, query_set, query_labels)
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 10)
-            
-            if it % grad_iter == 0:
-                optimizer.step()
-                scheduler.step()
-                optimizer.zero_grad()
+            optimizer.step()
 
-            iter_loss += self.item(loss.data)
-            iter_right += self.item(right.data)
-            iter_sample += 1
-            sys.stdout.write('step: {0:4} | loss: {1:2.6f}, accuracy: {2:3.2f}%'.format(it + 1, iter_loss / iter_sample, 100 * iter_right / iter_sample) + '\r')
-            sys.stdout.flush()
+            if (iteration + 1) % val_step == 0:
+                maml.eval()
+                val_loss = 0.0
+                correct = 0
+                total = 0
+                for val_support_set, val_support_labels, val_query_set, val_query_labels in self.val_data_loader:
+                    if torch.cuda.is_available():
+                        val_support_set, val_support_labels = val_support_set.cuda(), val_support_labels.cuda()
+                        val_query_set, val_query_labels = val_query_set.cuda(), val_query_labels.cuda()
 
-            if (it + 1) % val_step == 0:
-                acc = self.eval(model, B, N_for_eval, K, Q, val_iter, 
-                        na_rate=na_rate)
-                model.train()
-                if acc > best_acc:
-                    print('Best checkpoint')
-                    torch.save({'state_dict': model.state_dict()}, save_ckpt)
-                    best_acc = acc
-                iter_loss = 0.
-                iter_loss_dis = 0.
-                iter_right = 0.
-                iter_right_dis = 0.
-                iter_sample = 0.
-                
-        print("\n####################\n")
-        print("Finish training " + model_name)
+                    with torch.no_grad():
+                        loss, preds = maml(val_support_set, val_support_labels, val_query_set, val_query_labels)
+                        val_loss += loss.item()
+                        correct += (preds.argmax(1) == val_query_labels).sum().item()
+                        total += val_query_labels.size(0)
 
-    def eval(self,
-            model,
-            B, N, K, Q,
-            eval_iter,
-            na_rate=0,
-            pair=False,
-            ckpt=None): 
-        '''
-        model: a FewShotREModel instance
-        B: Batch size
-        N: Num of classes for each batch
-        K: Num of instances for each class in the support set
-        Q: Num of instances for each class in the query set
-        eval_iter: Num of iterations
-        ckpt: Checkpoint path. Set as None if using current model parameters.
-        return: Accuracy
-        '''
-        print("")
-        
-        model.eval()
-        if ckpt is None:
-            print("Use val dataset")
-            eval_dataset = self.val_data_loader
-        else:
-            print("Use test dataset !!!! module not setup yet")
-            # if ckpt != 'none':
-            #     state_dict = self.__load_model__(ckpt)['state_dict']
-            #     own_state = model.state_dict()
-            #     for name, param in state_dict.items():
-            #         if name not in own_state:
-            #             continue
-            #         own_state[name].copy_(param)
-            # eval_dataset = self.test_data_loader
-
-        iter_right = 0.0
-        iter_sample = 0.0
-        with torch.no_grad():
-            for it in range(eval_iter):
-                support, query, label = next(eval_dataset)
-                if torch.cuda.is_available():
-                    for k in support:
-                        support[k] = support[k].cuda()
-                    for k in query:
-                        query[k] = query[k].cuda()
-                    label = label.cuda()
-                logits, pred = model(support, query, N, K, Q * N + Q * na_rate)
-
-                right = model.accuracy(pred, label)
-                iter_right += self.item(right.data)
-                iter_sample += 1
-
-                sys.stdout.write('[EVAL] step: {0:4} | accuracy: {1:3.2f}%'.format(it + 1, 100 * iter_right / iter_sample) + '\r')
-                sys.stdout.flush()
-            print("")
-        return iter_right / iter_sample
+                print("Validation Loss: {:.4f}, Accuracy: {:.4f}".format(val_loss / len(self.val_data_loader), correct / total))
+                torch.save({'state_dict': model.state_dict()}, save_ckpt)

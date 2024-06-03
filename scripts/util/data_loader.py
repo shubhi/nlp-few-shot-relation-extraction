@@ -4,11 +4,54 @@ import os
 import numpy as np
 import random
 import json
+#from torch.utils.data import DataLoader, Dataset
+
+class RelationDataset(data.Dataset):
+    def __init__(self, data, word2id, max_length):
+        self.data = data
+        self.word2id = word2id
+        self.max_length = max_length
+
+    def __getitem__(self, index):
+        item = self.data[index]
+        tokens = item['tokens']
+        token_ids = [self.word2id.get(token, self.word2id['[UNK]']) for token in tokens]
+        token_ids = token_ids[:self.max_length]
+        token_ids += [self.word2id['[PAD]']] * (self.max_length - len(token_ids))
+        return torch.tensor(token_ids), torch.tensor(item['relation'])
+
+    def __len__(self):
+        return len(self.data)
+
+def get_loader(file_name, encoder_name, N, K, Q, batch_size, max_length, glove_mat, glove_word2id):
+    with open(file_name, 'r') as f:
+        data = json.load(f)
+
+    def collate_fn(data):
+        tokens, relations = zip(*data)
+        tokens = torch.stack(tokens)
+        relations = torch.stack(relations)
+        return tokens, relations
+
+    dataset = RelationDataset(data, glove_word2id, max_length)
+    loader = data.DataLoader(dataset, batch_size=N*(K+Q), shuffle=True, collate_fn=collate_fn)
+
+    def get_task_batch():
+        batch = next(iter(loader))
+        tokens, relations = batch
+        support_set = (tokens[:N*K], relations[:N*K])
+        query_set = (tokens[N*K:], relations[N*K:])
+        return support_set, query_set
+
+    loader.get_task_batch = get_task_batch
+
+    return loader
 
 class FewRelDataset(data.Dataset):
     def __init__(self, name, encoder, N, K, Q, na_rate, root):
         self.root = root
         path = os.path.join(root, name + ".json")
+        print("Loading data from {} ...".format(path))
         if not os.path.exists(path):
             print("[ERROR] Data file does not exist!")
             assert(0)
@@ -99,15 +142,17 @@ def collate_fn(data):
     batch_label = torch.tensor(batch_label)
     return batch_support, batch_query, batch_label
 
-def get_loader(name, encoder, N, K, Q, batch_size, 
+def get_loader(name, encoder, N, K, Q, batch_size,
         num_workers=8, collate_fn=collate_fn, na_rate=0, root='./data'):
     dataset = FewRelDataset(name, encoder, N, K, Q, na_rate, root)
+    print("Dataset size:", len(dataset))
     data_loader = data.DataLoader(dataset=dataset,
             batch_size=batch_size,
             shuffle=False,
             pin_memory=True,
             num_workers=num_workers,
             collate_fn=collate_fn)
+    print("Data loader size:", len(data_loader))
     return iter(data_loader)
 
 def data_loader_verify(data_loader, num_batches=2):

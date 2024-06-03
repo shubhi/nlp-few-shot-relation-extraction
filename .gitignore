@@ -5,3 +5,11 @@ pretrain/
 zzzfewrel/
 
 checkpoint/
+
+/scripts/util/__pycache__/
+
+/scripts/models/__pycache__/
+
+/*.zip/
+
+/*.pyc/

@@ -11,7 +11,7 @@ logging.basicConfig(filename='debug_log.txt', level=logging.DEBUG, filemode='w')
 
 class CNNSentenceEncoder(nn.Module):
 
-    def __init__(self, word_vec_mat, word2id, max_length, word_embedding_dim=50, 
+    def __init__(self, word_vec_mat, word2id, max_length, word_embedding_dim=50,
                  pos_embedding_dim=5, hidden_size=230):
         super(CNNSentenceEncoder, self).__init__()
         self.hidden_size = hidden_size
