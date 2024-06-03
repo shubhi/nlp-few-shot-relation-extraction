@@ -1,5 +1,6 @@
 import os
 import json
+from datetime import datetime
 
 import numpy as np
 
@@ -78,13 +79,6 @@ def main():
     except:
         raise Exception("Data Loader generation failed.")
     
-
-    if torch.cuda.is_available():
-        model.cuda()
-        print("Using CUDA.")
-    else:
-        print("Using CPU")
-    
     dot = False # use dot instead of L2 distance for proto
     save_ckpt = None
     lr = 1e-1 # Default is -1
@@ -104,9 +98,14 @@ def main():
     if len(ckpt_name) > 0:
         prefix += '-' + ckpt_name
 
-    if not os.path.exists('checkpoint'):
-        os.mkdir('checkpoint')
-    ckpt = 'checkpoint/{}.pth.tar'.format(prefix)
+    # Create checkpoint directory with date and time
+    now = datetime.now()
+    date_str = now.strftime("%Y%m%d")
+    time_str = now.strftime("%H%M%S")
+    ckpt_dir = os.path.join('checkpoint', date_str, time_str)
+    os.makedirs(ckpt_dir, exist_ok=True)
+
+    ckpt = os.path.join(ckpt_dir, '{}.pth.tar'.format(prefix))
     if save_ckpt:
         ckpt = save_ckpt
         
@@ -114,6 +113,12 @@ def main():
         model = Proto(sentence_encoder, dot=dot)
     else:
         raise NotImplementedError
+
+    if torch.cuda.is_available():
+        model.cuda()
+        print("Using CUDA.")
+    else:
+        print("Using CPU")
 
     try:  
         framework = FewShotREFramework(train_data_loader, val_data_loader)
