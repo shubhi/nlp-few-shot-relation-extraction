@@ -22,11 +22,13 @@ class CNNSentenceEncoder(nn.Module):
                                    word_embedding_dim, pos_embedding_dim)
         self.encoder = Encoder(max_length, word_embedding_dim, 
                                pos_embedding_dim, hidden_size)
+        self.dropout = nn.Dropout(p=0.5)
         self.pad_token = self.word2id['[PAD]']
         self.unk_token = self.word2id['[UNK]']
 
     def forward(self, inputs):
         x = self.embedding(inputs)
+        x = self.dropout(x)
         x = self.encoder(x)
         return x
 
