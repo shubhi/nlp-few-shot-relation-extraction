@@ -1,4 +1,5 @@
 # scripts/train_maml.py
+
 import os
 import json
 import numpy as np
@@ -8,21 +9,6 @@ from util.sentence_encoder import CNNSentenceEncoder
 from util.data_loader import get_loader
 from util.framework import FewShotREFramework
 from models.maml import MAML
-import warnings
-
-warnings.filterwarnings("ignore")
-
-# Disable OpenMP parallelism
-os.environ['OMP_NUM_THREADS'] = '1'
-os.environ['MKL_NUM_THREADS'] = '1'
-os.environ['NUMEXPR_NUM_THREADS'] = '1'
-os.environ['VECLIB_MAXIMUM_THREADS'] = '1'
-os.environ['OPENBLAS_NUM_THREADS'] = '1'
-
-# Set PyTorch to use single-threaded execution
-torch.set_num_threads(1)
-torch.set_num_interop_threads(1)
-
 
 def main():
     model_name = "maml"
@@ -32,7 +18,7 @@ def main():
     K = 1
     Q = 1
     batch_size = 4
-    max_length = 128
+    max_length = 16
     na_rate = 0
 
     print("{}-way-{}-shot Few-Shot Relation Classification".format(N, K))
@@ -52,7 +38,8 @@ def main():
         glove_word2id['[UNK]'] = glove_mat.shape[0] - 2
         glove_word2id['[PAD]'] = glove_mat.shape[0] - 1
 
-        glove_mat = torch.tensor(glove_mat, dtype=torch.float)
+        # Check the shape of the GloVe matrix
+        word_embedding_dim = glove_mat.shape[1]
 
     except Exception as e:
         print(f"Error loading GloVe embeddings: {e}")
@@ -67,7 +54,7 @@ def main():
         return
 
     try:
-        sentence_encoder = CNNSentenceEncoder(glove_mat, glove_word2id, max_length)
+        sentence_encoder = CNNSentenceEncoder(glove_mat, glove_word2id, max_length, word_embedding_dim=word_embedding_dim)
         print("Sentence encoder instantiated successfully.")
     except Exception as e:
         print(f"Error instantiating sentence encoder: {e}")
@@ -121,12 +108,12 @@ def main():
     train_iter = train_iter * grad_iter
     for iteration in range(train_iter):
         try:
-            support_set, query_set = train_data_loader.get_task_batch()
+            support_set, query_set = next(train_data_loader)
             query_loss, accuracy = model(support_set, query_set, N, K, Q)
             model.meta_update(outer_optimizer, query_loss)
 
             if (iteration + 1) % val_step == 0:
-                val_support_set, val_query_set = val_data_loader.get_task_batch()
+                val_support_set, val_query_set = next(val_data_loader)
                 val_query_loss, val_accuracy = model(val_support_set, val_query_set, N, K, Q)
                 print(f'Validation Loss: {val_query_loss.item()}, Validation Accuracy: {val_accuracy}')
 
@@ -135,6 +122,7 @@ def main():
                 print(f'Saved checkpoint at iteration {iteration + 1}')
         except Exception as e:
             print(f"Error during training iteration {iteration + 1}: {e}")
+            break
 
 if __name__ == "__main__":
     main()

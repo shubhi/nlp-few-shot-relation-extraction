@@ -6,6 +6,7 @@ import random
 import json
 #from torch.utils.data import DataLoader, Dataset
 
+
 class RelationDataset(data.Dataset):
     def __init__(self, data, word2id, max_length):
         self.data = data
@@ -23,6 +24,30 @@ class RelationDataset(data.Dataset):
     def __len__(self):
         return len(self.data)
 
+class TaskBatchDataLoader:
+    def __init__(self, dataset, batch_size, N, K, Q):
+        self.dataset = dataset
+        self.data_loader = data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        self.N = N
+        self.K = K
+        self.Q = Q
+        self.iter = iter(self.data_loader)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            batch = next(self.iter)
+        except StopIteration:
+            self.iter = iter(self.data_loader)
+            batch = next(self.iter)
+        
+        tokens, relations = batch
+        support_set = (tokens[:self.N * self.K], relations[:self.N * self.K])
+        query_set = (tokens[self.N * self.K:], relations[self.N * self.K:])
+        return support_set, query_set
+
 def get_loader(file_name, encoder_name, N, K, Q, batch_size, max_length, glove_mat, glove_word2id):
     with open(file_name, 'r') as f:
         data = json.load(f)
@@ -34,17 +59,7 @@ def get_loader(file_name, encoder_name, N, K, Q, batch_size, max_length, glove_m
         return tokens, relations
 
     dataset = RelationDataset(data, glove_word2id, max_length)
-    loader = data.DataLoader(dataset, batch_size=N*(K+Q), shuffle=True, collate_fn=collate_fn)
-
-    def get_task_batch():
-        batch = next(iter(loader))
-        tokens, relations = batch
-        support_set = (tokens[:N*K], relations[:N*K])
-        query_set = (tokens[N*K:], relations[N*K:])
-        return support_set, query_set
-
-    loader.get_task_batch = get_task_batch
-
+    loader = TaskBatchDataLoader(dataset, batch_size=N*(K+Q), N=N, K=K, Q=Q)
     return loader
 
 class FewRelDataset(data.Dataset):
